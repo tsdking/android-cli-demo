@@ -1,0 +1,76 @@
+name: Android CLI Demo
+
+on:
+  workflow_dispatch:  # Manual trigger only
+  push:
+    branches: [ main, master ]
+
+jobs:
+  android-cli-demo:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Android CLI
+      run: |
+        # Install Android CLI to user directory
+        mkdir -p ~/.local/bin
+        curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/android -o ~/.local/bin/android
+        chmod +x ~/.local/bin/android
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        
+        # Verify installation
+        echo "Android CLI version:"
+        android --version
+    
+    - name: Show Android CLI help
+      run: |
+        echo "=== Android CLI Help ==="
+        android --help | head -30
+        
+        echo -e "\n=== Create command help ==="
+        android create --help
+    
+    - name: List available templates
+      run: |
+        echo "=== Available templates ==="
+        android create --list
+    
+    - name: Create a test project with Android CLI
+      run: |
+        echo "=== Creating test project ==="
+        mkdir -p test-project
+        cd test-project
+        
+        # Create a new project using Android CLI
+        android create --name="TestApp" --minSdk=24 -o ./test-app
+        
+        echo "=== Project structure ==="
+        find test-app -type f -name "*.kt" -o -name "*.java" -o -name "*.xml" -o -name "*.gradle*" | sort | head -20
+        
+        echo -e "\n=== Build files ==="
+        ls -la test-app/*.gradle* test-app/gradle* 2>/dev/null || true
+    
+    - name: Build test project
+      run: |
+        cd test-project/test-app
+        
+        # Make gradlew executable
+        chmod +x ./gradlew
+        
+        # Try to build (may fail without full Android SDK setup)
+        echo "=== Attempting to build ==="
+        ./gradlew tasks --all | grep -E "(assemble|build)" | head -10 || echo "Gradle tasks listing failed"
+        
+        # Try a simple build check
+        ./gradlew --version || echo "Gradle version check failed"
+    
+    - name: Archive test project
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-cli-test-project
+        path: test-project/
+        retention-days: 1

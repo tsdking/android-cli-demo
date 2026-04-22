@@ -1,0 +1,87 @@
+name: Android Build with CLI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+    
+    - name: Install Android CLI
+      run: |
+        # Install Android CLI
+        mkdir -p ~/.local/bin
+        curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/android -o ~/.local/bin/android
+        chmod +x ~/.local/bin/android
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+    
+    - name: Verify Android CLI installation
+      run: |
+        android --version
+    
+    - name: Set up Android SDK
+      run: |
+        # Create Android SDK directory
+        mkdir -p ~/Android/Sdk
+        echo "ANDROID_HOME=$HOME/Android/Sdk" >> $GITHUB_ENV
+        echo "$HOME/Android/Sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        
+        # Download and extract command line tools
+        cd ~
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        mkdir -p cmdline-tools
+        unzip -q commandlinetools-linux-11076708_latest.zip -d cmdline-tools
+        mv cmdline-tools/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
+        rm -rf cmdline-tools commandlinetools-linux-11076708_latest.zip
+        
+        # Accept licenses
+        yes | ~/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+    
+    - name: Build with Gradle
+      run: |
+        # Grant execute permission to gradlew
+        chmod +x ./gradlew
+        
+        # Build the project
+        ./gradlew assembleDebug
+        
+        # List generated APK files
+        find . -name "*.apk" -type f | xargs ls -la
+    
+    - name: Upload APK artifact
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-apk
+        path: |
+          **/*.apk
+          !**/test-*.apk
+        retention-days: 7
+    
+    - name: Run tests
+      run: |
+        ./gradlew testDebugUnitTest
+        
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: |
+          **/build/test-results/**/*.xml
+          **/build/reports/tests/**/*
+        retention-days: 7
