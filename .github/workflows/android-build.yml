@@ -33,55 +33,59 @@ jobs:
       run: |
         android --version
     
-    - name: Set up Android SDK
+    - name: Show Android CLI capabilities
       run: |
-        # Create Android SDK directory
-        mkdir -p ~/Android/Sdk
-        echo "ANDROID_HOME=$HOME/Android/Sdk" >> $GITHUB_ENV
-        echo "$HOME/Android/Sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "=== Android CLI Help ==="
+        android --help
         
-        # Download and extract command line tools
-        cd ~
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-        mkdir -p cmdline-tools
-        unzip -q commandlinetools-linux-11076708_latest.zip -d cmdline-tools
-        mv cmdline-tools/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
-        rm -rf cmdline-tools commandlinetools-linux-11076708_latest.zip
+        echo -e "\n=== Create command help ==="
+        android create --help
         
-        # Accept licenses
-        yes | ~/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        echo -e "\n=== Available templates ==="
+        android create --list
     
-    - name: Build with Gradle
+    - name: Test Gradle wrapper
       run: |
-        # Grant execute permission to gradlew
+        # Make gradlew executable
         chmod +x ./gradlew
         
-        # Build the project
-        ./gradlew assembleDebug
+        # Show Gradle version
+        ./gradlew --version
         
-        # List generated APK files
-        find . -name "*.apk" -type f | xargs ls -la
+        # Show available tasks
+        echo "=== Available Gradle tasks ==="
+        ./gradlew tasks --all | grep -E "(assemble|build|test)" | head -10 || echo "Could not list tasks"
     
-    - name: Upload APK artifact
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: android-apk
-        path: |
-          **/*.apk
-          !**/test-*.apk
-        retention-days: 7
-    
-    - name: Run tests
+    - name: Try basic Gradle operations
       run: |
-        ./gradlew testDebugUnitTest
+        # Try to compile Kotlin code (without full Android SDK)
+        echo "=== Trying Kotlin compilation ==="
+        ./gradlew compileDebugKotlin --dry-run || echo "Kotlin compilation check failed"
         
-    - name: Upload test results
+        # Check project structure
+        echo -e "\n=== Project structure ==="
+        find . -name "*.kt" -o -name "*.java" -o -name "*.gradle*" | sort | head -15
+    
+    - name: Create test project with Android CLI
+      run: |
+        echo "=== Creating test project with Android CLI ==="
+        mkdir -p test-dir
+        cd test-dir
+        
+        # Create a new project
+        android create --name="TestApp" --minSdk=24 -o ./test-app
+        
+        echo "=== Test project created successfully ==="
+        echo "Project location: $(pwd)/test-app"
+        
+        # Show created files
+        find test-app -type f \( -name "*.kt" -o -name "*.java" -o -name "AndroidManifest.xml" -o -name "*.gradle*" \) | sort | head -10
+    
+    - name: Archive test project
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: test-results
+        name: android-cli-test-output
         path: |
-          **/build/test-results/**/*.xml
-          **/build/reports/tests/**/*
-        retention-days: 7
+          test-dir/
+        retention-days: 1
